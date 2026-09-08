@@ -1,0 +1,33 @@
+# Node dependencies and build
+frontend/node_modules/
+frontend/dist/
+frontend/.cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python cache & virtual environment
+__pycache__/
+*.py[cod]
+*$py.class
+backend/__pycache__/
+.venv/
+venv/
+ENV/
+
+# SQLite databases & WAL artifacts
+backend/currency.db
+backend/currency.db-shm
+backend/currency.db-wal
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+
+# Editor and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
