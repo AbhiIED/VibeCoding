@@ -235,11 +235,11 @@ export default function DualConverter({
                 <span className="text-slate-200 font-semibold">{conversionResult.rate}</span>{' '}
                 {targetCurrency}
               </div>
-              {conversionResult.rate > 0 && (
+              {conversionResult.inverse_rate > 0 && (
                 <div className="font-mono text-slate-500">
                   1 {targetCurrency} ={' '}
                   <span className="text-slate-400">
-                    {(1 / conversionResult.rate).toFixed(5)}
+                    {conversionResult.inverse_rate}
                   </span>{' '}
                   {sourceCurrency}
                 </div>

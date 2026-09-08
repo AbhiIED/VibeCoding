@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -8,7 +8,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts';
-import { TrendingUp, TrendingDown, Activity, Calendar } from 'lucide-react';
+import { TrendingUp, TrendingDown, Activity, Calendar, AlertTriangle } from 'lucide-react';
 
 const CustomTooltip = ({ active, payload, label, targetCurrency }) => {
   if (active && payload && payload.length) {
@@ -31,25 +31,10 @@ export default function TrendChart({
   sourceCurrency,
   targetCurrency,
   isLoading,
+  trendStats,
+  dataSource,
 }) {
-  const stats = useMemo(() => {
-    if (!historyData || historyData.length === 0) return null;
-    const rates = historyData.map((d) => d.rate);
-    const min = Math.min(...rates);
-    const max = Math.max(...rates);
-    const avg = rates.reduce((acc, v) => acc + v, 0) / rates.length;
-    const first = rates[0];
-    const last = rates[rates.length - 1];
-    const change = ((last - first) / first) * 100;
-
-    return {
-      min: min.toFixed(4),
-      max: max.toFixed(4),
-      avg: avg.toFixed(4),
-      change: change.toFixed(2),
-      isPositive: change >= 0,
-    };
-  }, [historyData]);
+  // All stats are now provided by the backend — zero business logic on the frontend
 
   if (isLoading) {
     return (
@@ -72,15 +57,16 @@ export default function TrendChart({
     );
   }
 
-  // Calculate chart domain for dynamic zoom
-  const rates = historyData.map((d) => d.rate);
-  const minVal = Math.min(...rates);
-  const maxVal = Math.max(...rates);
-  const padding = (maxVal - minVal) * 0.1 || minVal * 0.05;
+  // Y-axis domain derived from backend-provided stats (presentation-only padding)
+  const low = trendStats?.low ?? 0;
+  const high = trendStats?.high ?? 0;
+  const padding = (high - low) * 0.1 || low * 0.05;
   const yDomain = [
-    Math.max(0, Number((minVal - padding).toFixed(4))),
-    Number((maxVal + padding).toFixed(4)),
+    Math.max(0, Number((low - padding).toFixed(4))),
+    Number((high + padding).toFixed(4)),
   ];
+
+  const isSynthetic = dataSource === 'synthetic';
 
   return (
     <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-6 shadow-xl backdrop-blur-md transition-all hover:border-slate-700/80">
@@ -104,38 +90,47 @@ export default function TrendChart({
           </p>
         </div>
 
-        {stats && (
-          <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* Synthetic data disclaimer */}
+          {isSynthetic && (
+            <div className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                 title="Historical data not available for this pair — trend is estimated from current rate">
+              <AlertTriangle className="w-3 h-3" />
+              <span>Estimated</span>
+            </div>
+          )}
+
+          {trendStats && (
             <div
               className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full border ${
-                stats.isPositive
+                trendStats.is_positive
                   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                   : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
               }`}
             >
-              {stats.isPositive ? (
+              {trendStats.is_positive ? (
                 <TrendingUp className="w-3.5 h-3.5" />
               ) : (
                 <TrendingDown className="w-3.5 h-3.5" />
               )}
               <span>
-                {stats.isPositive ? '+' : ''}
-                {stats.change}%
+                {trendStats.is_positive ? '+' : ''}
+                {trendStats.change_percent}%
               </span>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* Mini metric tiles */}
-      {stats && (
+      {/* Mini metric tiles — values come directly from backend-computed stats */}
+      {trendStats && (
         <div className="grid grid-cols-3 gap-3 mb-6">
           <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-3">
             <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">
               30d Low
             </div>
             <div className="text-sm font-bold font-mono text-slate-200 mt-0.5">
-              {stats.min}
+              {trendStats.low}
             </div>
           </div>
           <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-3">
@@ -143,7 +138,7 @@ export default function TrendChart({
               30d Average
             </div>
             <div className="text-sm font-bold font-mono text-slate-200 mt-0.5">
-              {stats.avg}
+              {trendStats.average}
             </div>
           </div>
           <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-3">
@@ -151,7 +146,7 @@ export default function TrendChart({
               30d High
             </div>
             <div className="text-sm font-bold font-mono text-emerald-400 mt-0.5">
-              {stats.max}
+              {trendStats.high}
             </div>
           </div>
         </div>
@@ -202,6 +197,15 @@ export default function TrendChart({
           </AreaChart>
         </ResponsiveContainer>
       </div>
+
+      {/* Synthetic data footnote */}
+      {isSynthetic && (
+        <p className="text-[11px] text-amber-400/70 mt-3 flex items-center gap-1.5">
+          <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+          Historical time-series data is not available from the ECB for this currency pair.
+          Trend shown is estimated from the current live rate.
+        </p>
+      )}
     </div>
   );
 }
