@@ -46,6 +46,8 @@ export default function App() {
 
   const [conversionResult, setConversionResult] = useState(null);
   const [historyData, setHistoryData] = useState([]);
+  const [trendStats, setTrendStats] = useState(null);
+  const [dataSource, setDataSource] = useState(null);
   const [budgetData, setBudgetData] = useState(null);
   const [favorites, setFavorites] = useState([]);
   const [conversionHistory, setConversionHistory] = useState([]);
@@ -109,14 +111,20 @@ export default function App() {
     []
   );
 
-  // Fetch 30-Day Trend Chart
+  // Fetch 30-Day Trend Chart (structured response from backend)
   const loadHistoricalTrend = useCallback(async (src, tgt) => {
     setIsChartLoading(true);
     try {
       const data = await fetchHistorical(src, tgt, 30);
-      setHistoryData(data);
+      // Backend now returns { series, stats, source, meta }
+      setHistoryData(data.series || []);
+      setTrendStats(data.stats || null);
+      setDataSource(data.source || null);
     } catch (err) {
       console.error('Historical fetch error:', err);
+      setHistoryData([]);
+      setTrendStats(null);
+      setDataSource(null);
     } finally {
       setIsChartLoading(false);
     }
@@ -318,6 +326,8 @@ export default function App() {
               sourceCurrency={sourceCurrency}
               targetCurrency={targetCurrency}
               isLoading={isChartLoading}
+              trendStats={trendStats}
+              dataSource={dataSource}
             />
 
             {/* SQLite Conversion History Ledger */}

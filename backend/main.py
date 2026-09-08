@@ -47,9 +47,17 @@ async def convert(
     """
     Converts amount from source currency to target currency.
     Caches rate in SQLite and logs to conversion_history.
+    Returns inverse_rate so the frontend doesn't need to compute it.
     """
     src = (source_curr or from_curr or "USD").upper().strip()
     tgt = (target_curr or to_curr or "EUR").upper().strip()
+
+    # Validate currency codes
+    try:
+        src = services.validate_currency_code(src)
+        tgt = services.validate_currency_code(tgt)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     with get_db() as db:
         try:
@@ -58,6 +66,7 @@ async def convert(
             raise HTTPException(status_code=500, detail=f"Failed to fetch rate: {str(e)}")
 
         converted = round(amount * rate, 4)
+        inverse_rate = round(1.0 / rate, 6) if rate > 0 else 0.0
 
         try:
             db.execute(
@@ -83,7 +92,8 @@ async def convert(
         "target": tgt,
         "amount": amount,
         "converted": converted,
-        "rate": rate
+        "rate": rate,
+        "inverse_rate": inverse_rate
     }
 
 @app.get("/api/historical")
@@ -95,14 +105,22 @@ async def historical(
     days: int = Query(30, ge=1, le=90)
 ):
     """
-    Returns 30-day historical time-series data for chart visualization.
+    Returns structured historical time-series data with server-computed statistics.
+    Response shape: { series: [...], stats: {...}, source: str, meta: {...} }
     """
     src = (source_curr or from_curr or "USD").upper().strip()
     tgt = (target_curr or to_curr or "EUR").upper().strip()
 
+    # Validate currency codes
+    try:
+        src = services.validate_currency_code(src)
+        tgt = services.validate_currency_code(tgt)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     with get_db() as db:
         try:
-            data = await services.fetch_30d_history(src, tgt, db)
+            data = await services.fetch_30d_history(src, tgt, db, days=days)
             return data
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to fetch historical data: {str(e)}")

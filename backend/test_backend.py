@@ -41,7 +41,12 @@ class TestCurrencyBackend(unittest.TestCase):
         self.assertEqual(data["amount"], 100.0)
         self.assertGreater(data["rate"], 0)
         self.assertGreater(data["converted"], 0)
-        print(f"Convert 100 USD -> EUR: {data['converted']} (rate {data['rate']})")
+        # inverse_rate must be present and server-computed
+        self.assertIn("inverse_rate", data)
+        self.assertGreater(data["inverse_rate"], 0)
+        # Verify inverse_rate is approximately 1/rate
+        self.assertAlmostEqual(data["inverse_rate"], round(1.0 / data["rate"], 6), places=5)
+        print(f"Convert 100 USD -> EUR: {data['converted']} (rate {data['rate']}, inverse {data['inverse_rate']})")
 
     def test_04_cache_populated(self):
         with get_db() as db:
@@ -55,11 +60,37 @@ class TestCurrencyBackend(unittest.TestCase):
         res = client.get("/api/historical?from=USD&to=EUR&days=30")
         self.assertEqual(res.status_code, 200)
         data = res.json()
-        self.assertIsInstance(data, list)
-        self.assertGreater(len(data), 15)
-        self.assertIn("date", data[0])
-        self.assertIn("rate", data[0])
-        print(f"Historical points fetched: {len(data)}")
+        # Response must be structured dict with series, stats, source, meta
+        self.assertIsInstance(data, dict)
+        self.assertIn("series", data)
+        self.assertIn("stats", data)
+        self.assertIn("source", data)
+        self.assertIn("meta", data)
+        # Series validation
+        series = data["series"]
+        self.assertIsInstance(series, list)
+        self.assertGreater(len(series), 15)
+        self.assertIn("date", series[0])
+        self.assertIn("rate", series[0])
+        # Stats validation — all business logic computed server-side
+        stats = data["stats"]
+        self.assertIn("high", stats)
+        self.assertIn("low", stats)
+        self.assertIn("average", stats)
+        self.assertIn("change_percent", stats)
+        self.assertIn("is_positive", stats)
+        self.assertIn("start_rate", stats)
+        self.assertIn("end_rate", stats)
+        self.assertIn("data_points", stats)
+        self.assertGreater(stats["high"], 0)
+        self.assertLessEqual(stats["low"], stats["high"])
+        # Source must be a known value
+        self.assertIn(data["source"], ["frankfurter", "synthetic", "identity"])
+        # Meta validation
+        self.assertEqual(data["meta"]["base"], "USD")
+        self.assertEqual(data["meta"]["target"], "EUR")
+        self.assertEqual(data["meta"]["days"], 30)
+        print(f"Historical: {stats['data_points']} points, source={data['source']}, change={stats['change_percent']}%")
 
     def test_06_travel_budget_mode(self):
         res = client.get("/api/budget?base=USD&amount=1500")
@@ -115,6 +146,19 @@ class TestCurrencyBackend(unittest.TestCase):
         self.assertGreater(len(history), 0)
         self.assertEqual(history[0]["source_currency"], "USD")
         self.assertIn(history[0]["target_currency"], ["EUR", "CAD", "JPY"])
+
+    def test_09_invalid_currency_code(self):
+        """Backend must reject unsupported currency codes with 400"""
+        # Invalid source currency
+        res = client.get("/api/convert?from=FAKE&to=EUR&amount=100")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("Unsupported currency code", res.json()["detail"])
+
+        # Invalid target currency on historical
+        res2 = client.get("/api/historical?from=USD&to=ZZZZZ&days=30")
+        self.assertEqual(res2.status_code, 400)
+        self.assertIn("Unsupported currency code", res2.json()["detail"])
+        print("Invalid currency code validation: PASSED")
 
 if __name__ == "__main__":
     unittest.main()
